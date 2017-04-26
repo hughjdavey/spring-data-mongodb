@@ -20,8 +20,19 @@ import static org.springframework.data.mongodb.core.query.SerializationUtils.*;
 import static org.springframework.data.util.Optionals.*;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
+import java.util.Scanner;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.bson.Document;
@@ -563,6 +574,7 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 	}
 
 	public <T> T findOne(Query query, Class<T> entityClass, String collectionName) {
+
 		if (query.getSortObject() == null) {
 			return doFindOne(collectionName, query.getQueryObject(), query.getFieldsObject(), entityClass);
 		} else {
@@ -587,7 +599,14 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 		}
 
 		Document mappedQuery = queryMapper.getMappedObject(query.getQueryObject(), getPersistentEntity(entityClass));
-		return execute(collectionName, new FindCallback(mappedQuery)).iterator().hasNext();
+		FindIterable<Document> iterable = execute(collectionName, new FindCallback(mappedQuery));
+
+		if (query.getCollation().isPresent()) {
+			iterable = iterable
+					.collation(query.getCollation().map(org.springframework.data.mongodb.core.Collation::toMongoCollation).get());
+		}
+
+		return iterable.iterator().hasNext();
 	}
 
 	// Find methods that take a Query to express the query and that return a List of objects.
@@ -1366,7 +1385,7 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 	}
 
 	public <T> List<T> findAll(Class<T> entityClass, String collectionName) {
-		return executeFindMultiInternal(new FindCallback(null), null,
+		return executeFindMultiInternal(new FindCallback(null, null), null,
 				new ReadDocumentCallback<T>(mongoConverter, entityClass, collectionName), collectionName);
 	}
 
@@ -1806,7 +1825,7 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 					co.maxDocuments(((Number) collectionOptions.get("max")).longValue());
 				}
 
-				if(collectionOptions.containsKey("collation")) {
+				if (collectionOptions.containsKey("collation")) {
 					co.collation(IndexConverters.fromDocument(collectionOptions.get("collation", Document.class)));
 				}
 
@@ -2218,31 +2237,33 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 	 *
 	 * @author Oliver Gierke
 	 * @author Thomas Risberg
+	 * @author Christoph Strobl
 	 */
 	private static class FindOneCallback implements CollectionCallback<Document> {
 
 		private final Document query;
-		private final Document fields;
+		private final Optional<Document> fields;
 
 		public FindOneCallback(Document query, Document fields) {
 			this.query = query;
-			this.fields = fields;
+			this.fields = Optional.ofNullable(fields);
 		}
 
 		public Document doInCollection(MongoCollection<Document> collection) throws MongoException, DataAccessException {
-			if (fields == null) {
-				if (LOGGER.isDebugEnabled()) {
-					LOGGER.debug("findOne using query: {} in db.collection: {}", serializeToJsonSafely(query),
-							collection.getNamespace().getFullName());
-				}
-				return collection.find(query).first();
-			} else {
-				if (LOGGER.isDebugEnabled()) {
-					LOGGER.debug("findOne using query: {} fields: {} in db.collection: {}", serializeToJsonSafely(query), fields,
-							collection.getNamespace().getFullName());
-				}
-				return collection.find(query).projection(fields).first();
+
+			FindIterable<Document> iterable = collection.find(query);
+
+			if (LOGGER.isDebugEnabled()) {
+
+				LOGGER.debug("findOne using query: {} fields: {} in db.collection: {}", serializeToJsonSafely(query),
+						serializeToJsonSafely(fields.orElseGet(() -> new Document())), collection.getNamespace().getFullName());
 			}
+
+			if (fields.isPresent()) {
+				iterable = iterable.projection(fields.get());
+			}
+
+			return iterable.first();
 		}
 	}
 
@@ -2252,29 +2273,33 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 	 *
 	 * @author Oliver Gierke
 	 * @author Thomas Risberg
+	 * @author Christoph Strobl
 	 */
 	private static class FindCallback implements CollectionCallback<FindIterable<Document>> {
 
 		private final Document query;
-		private final Document fields;
+		private final Optional<Document> fields;
 
 		public FindCallback(Document query) {
 			this(query, null);
 		}
 
 		public FindCallback(Document query, Document fields) {
-			this.query = query == null ? new Document() : query;
-			this.fields = fields;
+
+			this.query = query != null ? query : new Document();
+			this.fields = Optional.ofNullable(fields);
 		}
 
 		public FindIterable<Document> doInCollection(MongoCollection<Document> collection)
 				throws MongoException, DataAccessException {
 
-			if (fields == null || fields.isEmpty()) {
-				return collection.find(query);
-			} else {
-				return collection.find(query).projection(fields);
+			FindIterable<Document> iterable = collection.find(query);
+
+			if (fields.filter(val -> !val.isEmpty()).isPresent()) {
+				iterable = iterable.projection(fields.get());
 			}
+
+			return iterable;
 		}
 	}
 
@@ -2443,6 +2468,9 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 
 			FindIterable<Document> cursorToUse = cursor;
 
+			if (query.getCollation().isPresent()) {
+				cursorToUse = cursorToUse.collation(query.getCollation().map(val -> val.toMongoCollation()).get());
+			}
 			try {
 				if (query.getSkip() > 0) {
 					cursorToUse = cursorToUse.skip((int) query.getSkip());
@@ -2450,7 +2478,7 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 				if (query.getLimit() > 0) {
 					cursorToUse = cursorToUse.limit(query.getLimit());
 				}
-				if (query.getSortObject() != null) {
+				if (query.getSortObject() != null && !query.getSortObject().isEmpty()) {
 					Document sort = type != null ? getMappedSortObject(query, type) : query.getSortObject();
 					cursorToUse = cursorToUse.sort(sort);
 				}

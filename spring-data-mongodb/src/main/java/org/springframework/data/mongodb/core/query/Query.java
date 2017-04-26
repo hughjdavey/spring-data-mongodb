@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -32,6 +33,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Order;
 import org.springframework.data.mongodb.InvalidMongoDbApiUsageException;
+import org.springframework.data.mongodb.core.Collation;
 import org.springframework.util.Assert;
 import org.springframework.util.ObjectUtils;
 
@@ -46,8 +48,8 @@ public class Query {
 
 	private static final String RESTRICTED_TYPES_KEY = "_$RESTRICTED_TYPES";
 
-	private final Set<Class<?>> restrictedTypes = new HashSet<Class<?>>();
-	private final Map<String, CriteriaDefinition> criteria = new LinkedHashMap<String, CriteriaDefinition>();
+	private final Set<Class<?>> restrictedTypes = new HashSet<>();
+	private final Map<String, CriteriaDefinition> criteria = new LinkedHashMap<>();
 	private Field fieldSpec;
 	private Sort sort;
 	private long skip;
@@ -55,6 +57,8 @@ public class Query {
 	private String hint;
 
 	private Meta meta = new Meta();
+
+	private Optional<Collation> collation = Optional.empty();
 
 	/**
 	 * Static factory method to create a {@link Query} using the provided {@link CriteriaDefinition}.
@@ -194,7 +198,7 @@ public class Query {
 	 * @return the restrictedTypes
 	 */
 	public Set<Class<?>> getRestrictedTypes() {
-		return restrictedTypes == null ? Collections.<Class<?>> emptySet() : restrictedTypes;
+		return restrictedTypes == null ? Collections.emptySet() : restrictedTypes;
 	}
 
 	/**
@@ -398,8 +402,31 @@ public class Query {
 		this.meta = meta;
 	}
 
+	/**
+	 * Set the {@link Collation} applying language-specific rules for string comparison.
+	 *
+	 * @param collation can be {@literal null}.
+	 * @return
+	 * @since 2.0
+	 */
+	public Query collation(Collation collation) {
+
+		this.collation = Optional.ofNullable(collation);
+		return this;
+	}
+
+	/**
+	 * Get the {@link Collation} defining language-specific rules for string comparison.
+	 *
+	 * @return
+	 * @since 2.0
+	 */
+	public Optional<Collation> getCollation() {
+		return collation;
+	}
+
 	protected List<CriteriaDefinition> getCriteria() {
-		return new ArrayList<CriteriaDefinition>(this.criteria.values());
+		return new ArrayList<>(this.criteria.values());
 	}
 
 	/*
@@ -445,8 +472,10 @@ public class Query {
 		boolean skipEqual = this.skip == that.skip;
 		boolean limitEqual = this.limit == that.limit;
 		boolean metaEqual = nullSafeEquals(this.meta, that.meta);
+		boolean collationEqual = nullSafeEquals(this.collation.orElse(null), that.collation.orElse(null));
 
-		return criteriaEqual && fieldsEqual && sortEqual && hintEqual && skipEqual && limitEqual && metaEqual;
+		return criteriaEqual && fieldsEqual && sortEqual && hintEqual && skipEqual && limitEqual && metaEqual
+				&& collationEqual;
 	}
 
 	/*
@@ -465,6 +494,7 @@ public class Query {
 		result += 31 * skip;
 		result += 31 * limit;
 		result += 31 * nullSafeHashCode(meta);
+		result += 31 * nullSafeHashCode(collation.orElse(null));
 
 		return result;
 	}

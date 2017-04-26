@@ -19,7 +19,14 @@ import java.util.Locale;
 import java.util.Optional;
 
 import org.bson.Document;
+import org.springframework.core.convert.converter.Converter;
 import org.springframework.util.Assert;
+
+import com.mongodb.client.model.Collation.Builder;
+import com.mongodb.client.model.CollationAlternate;
+import com.mongodb.client.model.CollationCaseFirst;
+import com.mongodb.client.model.CollationMaxVariable;
+import com.mongodb.client.model.CollationStrength;
 
 /**
  * Central abstraction for MongoDB collation support. <br />
@@ -325,31 +332,26 @@ public class Collation {
 		return alternate(new AlternateWithMaxVariable(alternateValue.alternate, maxVariable));
 	}
 
+	/**
+	 * Get the {@link Document} representation of the {@link Collation}.
+	 *
+	 * @return
+	 */
 	public Document toDocument() {
+		return map(toMongoDocumentConverter());
+	}
 
-		Document document = new Document();
-		document.append("locale", locale.asString());
+	/**
+	 * Get the {@link com.mongodb.client.model.Collation} representation of the {@link Collation}.
+	 *
+	 * @return
+	 */
+	public com.mongodb.client.model.Collation toMongoCollation() {
+		return map(toMongoCollationConverter());
+	}
 
-		strength.ifPresent(val -> {
-
-			document.append("strength", val.level);
-
-			val.caseLevel.ifPresent(cl -> document.append("caseLevel", cl));
-			val.caseFirst.ifPresent(cl -> document.append("caseFirst", cl.state));
-		});
-
-		numericOrdering.ifPresent(val -> document.append("numericOrdering", val));
-		alternate.ifPresent(val -> {
-
-			document.append("alternate", val.alternate);
-			val.maxVariable.ifPresent(maxVariable -> document.append("maxVariable", maxVariable));
-		});
-
-		backwards.ifPresent(val -> document.append("backwards", val));
-		normalization.ifPresent(val -> document.append("normalization", val));
-		version.ifPresent(val -> document.append("version", val));
-
-		return document;
+	public <R> R map(Converter<? super Collation, ? extends R> mapper) {
+		return mapper.convert(this);
 	}
 
 	private Collation copy() {
@@ -672,4 +674,64 @@ public class Collation {
 		}
 	}
 
+	private static Converter<Collation, Document> toMongoDocumentConverter() {
+
+		return source -> {
+
+			Document document = new Document();
+			document.append("locale", source.locale.asString());
+
+			source.strength.ifPresent(val -> {
+
+				document.append("strength", val.level);
+
+				val.caseLevel.ifPresent(cl -> document.append("caseLevel", cl));
+				val.caseFirst.ifPresent(cl -> document.append("caseFirst", cl.state));
+			});
+
+			source.numericOrdering.ifPresent(val -> document.append("numericOrdering", val));
+			source.alternate.ifPresent(val -> {
+
+				document.append("alternate", val.alternate);
+				val.maxVariable.ifPresent(maxVariable -> document.append("maxVariable", maxVariable));
+			});
+
+			source.backwards.ifPresent(val -> document.append("backwards", val));
+			source.normalization.ifPresent(val -> document.append("normalization", val));
+			source.version.ifPresent(val -> document.append("version", val));
+
+			return document;
+		};
+	}
+
+	private static Converter<Collation, com.mongodb.client.model.Collation> toMongoCollationConverter() {
+
+		return source -> {
+
+			Builder builder = com.mongodb.client.model.Collation.builder();
+
+			builder.locale(source.locale.asString());
+
+			source.strength.ifPresent(val -> {
+
+				builder.collationStrength(CollationStrength.fromInt(val.level));
+
+				val.caseLevel.ifPresent(cl -> builder.caseLevel(cl));
+				val.caseFirst.ifPresent(cl -> builder.collationCaseFirst(CollationCaseFirst.fromString(cl.state)));
+			});
+
+			source.numericOrdering.ifPresent(val -> builder.numericOrdering(val));
+			source.alternate.ifPresent(val -> {
+
+				builder.collationAlternate(CollationAlternate.fromString(val.alternate));
+				val.maxVariable
+						.ifPresent(maxVariable -> builder.collationMaxVariable(CollationMaxVariable.fromString(maxVariable)));
+			});
+
+			source.backwards.ifPresent(val -> builder.backwards(val));
+			source.normalization.ifPresent(val -> builder.normalization(val));
+
+			return builder.build();
+		};
+	}
 }

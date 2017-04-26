@@ -116,6 +116,8 @@ public class MongoTemplateUnitTests extends MongoOperationsUnitTests {
 		when(collection.find(Mockito.any(org.bson.Document.class))).thenReturn(findIterable);
 		when(findIterable.sort(Mockito.any(org.bson.Document.class))).thenReturn(findIterable);
 		when(findIterable.modifiers(Mockito.any(org.bson.Document.class))).thenReturn(findIterable);
+		when(findIterable.collation(Mockito.any())).thenReturn(findIterable);
+		when(findIterable.limit(anyInt())).thenReturn(findIterable);
 
 		this.mappingContext = new MongoMappingContext();
 		this.converter = new MappingMongoConverter(new DefaultDbRefResolver(factory), mappingContext);
@@ -613,6 +615,30 @@ public class MongoTemplateUnitTests extends MongoOperationsUnitTests {
 
 		assertThat(queryCaptor.getValue(), isBsonObject().containing("$isolated", 0).containing("eddard", "stark"));
 		assertThat(updateCaptor.getValue(), isBsonObject().containing("$set.jon", "snow").notContaining("$isolated"));
+	}
+
+	@Test // DATAMONGO-1518
+	public void findShouldUseCollationWhenPresent() {
+
+		template.find(new BasicQuery("{}").collation(Collation.of("fr")), AutogenerateableId.class);
+
+		verify(findIterable).collation(eq(com.mongodb.client.model.Collation.builder().locale("fr").build()));
+	}
+
+	@Test // DATAMONGO-1518
+	public void findOneShouldUseCollationWhenPresent() {
+
+		template.findOne(new BasicQuery("{}").collation(Collation.of("fr")), AutogenerateableId.class);
+
+		verify(findIterable).collation(eq(com.mongodb.client.model.Collation.builder().locale("fr").build()));
+	}
+
+	@Test // DATAMONGO-1518
+	public void existsShouldUseCollationWhenPresent() {
+
+		template.exists(new BasicQuery("{}").collation(Collation.of("fr")), AutogenerateableId.class);
+
+		verify(findIterable).collation(eq(com.mongodb.client.model.Collation.builder().locale("fr").build()));
 	}
 
 	class AutogenerateableId {
