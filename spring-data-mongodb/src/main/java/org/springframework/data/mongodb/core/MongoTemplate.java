@@ -358,12 +358,11 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 				Document mappedFields = queryMapper.getMappedFields(query.getFieldsObject(), persistentEntity);
 				Document mappedQuery = queryMapper.getMappedObject(query.getQueryObject(), persistentEntity);
 
-				FindIterable<Document> cursor = collection.find(mappedQuery).projection(mappedFields);
-				QueryCursorPreparer cursorPreparer = new QueryCursorPreparer(query, entityType);
+				FindIterable<Document> cursor = new QueryCursorPreparer(query, entityType)
+						.prepare(collection.find(mappedQuery).projection(mappedFields));
 
-				ReadDocumentCallback<T> readCallback = new ReadDocumentCallback<T>(mongoConverter, entityType, collectionName);
-
-				return new CloseableIterableCursorAdapter<T>(cursorPreparer.prepare(cursor), exceptionTranslator, readCallback);
+				return new CloseableIterableCursorAdapter<T>(cursor, exceptionTranslator,
+						new ReadDocumentCallback<T>(mongoConverter, entityType, collectionName));
 			}
 		});
 	}
@@ -717,8 +716,18 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 
 	public <T> T findAndModify(Query query, Update update, FindAndModifyOptions options, Class<T> entityClass,
 			String collectionName) {
+
+		FindAndModifyOptions optionsToUse = FindAndModifyOptions.of(options);
+
+		Optionals.ifAllPresent(query.getCollation(), optionsToUse.getCollation(), (l, r) -> {
+			throw new IllegalArgumentException(
+					"Both Query and FindAndModifyOptions define the collation. Please provide the collation only via one of the two.");
+		});
+
+		query.getCollation().ifPresent(optionsToUse::collation);
+
 		return doFindAndModify(collectionName, query.getQueryObject(), query.getFieldsObject(),
-				getMappedSortObject(query, entityClass), entityClass, update, options);
+				getMappedSortObject(query, entityClass), entityClass, update, optionsToUse);
 	}
 
 	// Find methods that take a Query to express the query and that return a single object that is also removed from the
@@ -2359,9 +2368,11 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 			if (options.returnNew) {
 				opts.returnDocument(ReturnDocument.AFTER);
 			}
+
+			options.getCollation().map(Collation::toMongoCollation).ifPresent(opts::collation);
+
 			return collection.findOneAndUpdate(query, update, opts);
 		}
-
 	}
 
 	/**

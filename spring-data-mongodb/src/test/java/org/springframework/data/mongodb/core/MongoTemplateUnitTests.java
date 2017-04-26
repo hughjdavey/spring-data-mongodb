@@ -114,6 +114,7 @@ public class MongoTemplateUnitTests extends MongoOperationsUnitTests {
 		when(factory.getExceptionTranslator()).thenReturn(exceptionTranslator);
 		when(db.getCollection(Mockito.any(String.class), eq(Document.class))).thenReturn(collection);
 		when(collection.find(Mockito.any(org.bson.Document.class))).thenReturn(findIterable);
+		when(findIterable.projection(Mockito.any())).thenReturn(findIterable);
 		when(findIterable.sort(Mockito.any(org.bson.Document.class))).thenReturn(findIterable);
 		when(findIterable.modifiers(Mockito.any(org.bson.Document.class))).thenReturn(findIterable);
 		when(findIterable.collation(Mockito.any())).thenReturn(findIterable);
@@ -618,6 +619,22 @@ public class MongoTemplateUnitTests extends MongoOperationsUnitTests {
 	}
 
 	@Test // DATAMONGO-1518
+	public void executeQueryShouldUseCollationWhenPresent() {
+
+		template.executeQuery(new BasicQuery("{}").collation(Collation.of("fr")), "collection-1", val -> {});
+
+		verify(findIterable).collation(eq(com.mongodb.client.model.Collation.builder().locale("fr").build()));
+	}
+
+	@Test // DATAMONGO-1518
+	public void streamQueryShouldUseCollationWhenPresent() {
+
+		template.stream(new BasicQuery("{}").collation(Collation.of("fr")), AutogenerateableId.class).next();
+
+		verify(findIterable).collation(eq(com.mongodb.client.model.Collation.builder().locale("fr").build()));
+	}
+
+	@Test // DATAMONGO-1518
 	public void findShouldUseCollationWhenPresent() {
 
 		template.find(new BasicQuery("{}").collation(Collation.of("fr")), AutogenerateableId.class);
@@ -639,6 +656,17 @@ public class MongoTemplateUnitTests extends MongoOperationsUnitTests {
 		template.exists(new BasicQuery("{}").collation(Collation.of("fr")), AutogenerateableId.class);
 
 		verify(findIterable).collation(eq(com.mongodb.client.model.Collation.builder().locale("fr").build()));
+	}
+
+	@Test // DATAMONGO-1518
+	public void findAndModfiyShoudUseCollationWhenPresent() {
+
+		template.findAndModify(new BasicQuery("{}").collation(Collation.of("fr")), new Update(), AutogenerateableId.class);
+
+		ArgumentCaptor<FindOneAndUpdateOptions> options = ArgumentCaptor.forClass(FindOneAndUpdateOptions.class);
+		verify(collection).findOneAndUpdate(Mockito.any(), Mockito.any(), options.capture());
+
+		assertThat(options.getValue().getCollation().getLocale(), is("fr"));
 	}
 
 	class AutogenerateableId {
