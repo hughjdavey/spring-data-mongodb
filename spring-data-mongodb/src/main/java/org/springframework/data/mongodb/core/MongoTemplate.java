@@ -1466,21 +1466,19 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 			}
 
 			if (!CollectionUtils.isEmpty(mapReduceOptions.getScopeVariables())) {
-				Document vars = new Document();
-				vars.putAll(mapReduceOptions.getScopeVariables());
-				result = result.scope(vars);
+				result = result.scope(new Document(mapReduceOptions.getScopeVariables()));
 			}
 			if (mapReduceOptions.getLimit() != null && mapReduceOptions.getLimit().intValue() > 0) {
 				result = result.limit(mapReduceOptions.getLimit());
 			}
-			if (StringUtils.hasText(mapReduceOptions.getFinalizeFunction())) {
-				result = result.finalizeFunction(mapReduceOptions.getFinalizeFunction());
+			if (mapReduceOptions.getFinalizeFunction().filter(StringUtils::hasText).isPresent()) {
+				result = result.finalizeFunction(mapReduceOptions.getFinalizeFunction().get());
 			}
 			if (mapReduceOptions.getJavaScriptMode() != null) {
 				result = result.jsMode(mapReduceOptions.getJavaScriptMode());
 			}
-			if (mapReduceOptions.getOutputSharded() != null) {
-				result = result.sharded(mapReduceOptions.getOutputSharded());
+			if (mapReduceOptions.getOutputSharded().isPresent()) {
+				result = result.sharded(mapReduceOptions.getOutputSharded().get());
 			}
 		}
 

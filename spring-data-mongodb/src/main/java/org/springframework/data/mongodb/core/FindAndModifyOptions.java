@@ -76,6 +76,8 @@ public class FindAndModifyOptions {
 	}
 
 	/**
+	 * Define the {@link Collation} specifying language-specific rules for string comparison.
+	 *
 	 * @param collation
 	 * @return
 	 * @since 2.0
@@ -99,6 +101,8 @@ public class FindAndModifyOptions {
 	}
 
 	/**
+	 * Get the {@link Collation} specifying language-specific rules for string comparison.
+	 *
 	 * @return
 	 * @since 2.0
 	 */

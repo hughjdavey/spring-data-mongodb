@@ -38,14 +38,15 @@ import com.mongodb.DBObject;
  */
 public class AggregationOptions {
 
-	private static final String COLLATION = "collation";
+	private static final String BATCH_SIZE = "batchSize";
 	private static final String CURSOR = "cursor";
 	private static final String EXPLAIN = "explain";
 	private static final String ALLOW_DISK_USE = "allowDiskUse";
+	private static final String COLLATION = "collation";
 
 	private final boolean allowDiskUse;
 	private final boolean explain;
-	private final Document cursor;
+	private final Optional<Document> cursor;
 	private final Optional<Collation> collation;
 
 	/**
@@ -64,15 +65,16 @@ public class AggregationOptions {
 	 *
 	 * @param allowDiskUse whether to off-load intensive sort-operations to disk.
 	 * @param explain whether to get the execution plan for the aggregation instead of the actual results.
-	 * @param cursorBatchSize initial cursor batch size.
-	 * @param colllation collation for string comparison. Can be {@literal null}.
+	 * @param cursor can be {@literal null}, used to pass additional options (such as {@code batchSize}) to the
+	 *          aggregation.
+	 * @param collation collation for string comparison. Can be {@literal null}.
 	 * @since 2.0
 	 */
 	public AggregationOptions(boolean allowDiskUse, boolean explain, Document cursor, Collation collation) {
 
 		this.allowDiskUse = allowDiskUse;
 		this.explain = explain;
-		this.cursor = cursor;
+		this.cursor = Optional.ofNullable(cursor);
 		this.collation = Optional.ofNullable(collation);
 	}
 
@@ -99,26 +101,11 @@ public class AggregationOptions {
 
 		Assert.notNull(document, "Document must not be null!");
 
-		boolean allowDiskUse = false;
-		boolean explain = false;
-		Document cursor = null;
-		Collation collation = null;
-
-		if (document.containsKey(ALLOW_DISK_USE)) {
-			allowDiskUse = document.get(ALLOW_DISK_USE, Boolean.class);
-		}
-
-		if (document.containsKey(EXPLAIN)) {
-			explain = (Boolean) document.get(EXPLAIN);
-		}
-
-		if (document.containsKey(CURSOR)) {
-			cursor = document.get(CURSOR, Document.class);
-		}
-
-		if (document.containsKey(COLLATION)) {
-			collation = Collation.from(document.get(COLLATION, Document.class));
-		}
+		boolean allowDiskUse = document.getBoolean(ALLOW_DISK_USE, false);
+		boolean explain = document.getBoolean(EXPLAIN, false);
+		Document cursor = document.get(CURSOR, Document.class);
+		Collation collation = document.containsKey(COLLATION) ? Collation.from(document.get(COLLATION, Document.class))
+				: null;
 
 		return new AggregationOptions(allowDiskUse, explain, cursor, collation);
 	}
@@ -150,8 +137,8 @@ public class AggregationOptions {
 	 */
 	public Integer getCursorBatchSize() {
 
-		if (cursor != null && cursor.containsKey("batchSize")) {
-			return cursor.get("batchSize", Integer.class);
+		if (cursor.filter(val -> val.containsKey(BATCH_SIZE)).isPresent()) {
+			return cursor.get().get(BATCH_SIZE, Integer.class);
 		}
 
 		return null;
@@ -162,7 +149,7 @@ public class AggregationOptions {
 	 *
 	 * @return
 	 */
-	public Document getCursor() {
+	public Optional<Document> getCursor() {
 		return cursor;
 	}
 
@@ -195,12 +182,12 @@ public class AggregationOptions {
 			result.put(EXPLAIN, explain);
 		}
 
-		if (cursor != null && !result.containsKey(CURSOR)) {
-			result.put(CURSOR, cursor);
+		if (!result.containsKey(CURSOR)) {
+			cursor.ifPresent(val -> result.put(CURSOR, val));
 		}
 
-		if (collation.isPresent() && !result.containsKey(COLLATION)) {
-			result.append(COLLATION, collation.map(Collation::toDocument).get());
+		if (!result.containsKey(COLLATION)) {
+			collation.map(Collation::toDocument).ifPresent(val -> result.append(COLLATION, val));
 		}
 
 		return result;
@@ -216,8 +203,9 @@ public class AggregationOptions {
 		Document document = new Document();
 		document.put(ALLOW_DISK_USE, allowDiskUse);
 		document.put(EXPLAIN, explain);
-		document.put(CURSOR, cursor);
-		collation.ifPresent(val -> document.append("collation", val.toDocument()));
+
+		cursor.ifPresent(val -> document.put(CURSOR, val));
+		collation.ifPresent(val -> document.append(COLLATION, val.toDocument()));
 
 		return document;
 	}
@@ -296,6 +284,12 @@ public class AggregationOptions {
 			return this;
 		}
 
+		/**
+		 * Define collation settings for string comparison.
+		 *
+		 * @param collation can be {@literal null}.
+		 * @return
+		 */
 		public Builder collation(Collation collation) {
 
 			this.collation = collation;

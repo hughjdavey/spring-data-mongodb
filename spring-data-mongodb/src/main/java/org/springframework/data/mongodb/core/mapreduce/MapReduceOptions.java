@@ -20,9 +20,9 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.bson.Document;
+import org.springframework.data.mongodb.core.Collation;
 
 import com.mongodb.MapReduceCommand;
-import org.springframework.data.mongodb.core.Collation;
 
 /**
  * @author Mark Pollack
@@ -33,25 +33,17 @@ public class MapReduceOptions {
 
 	private String outputCollection;
 
-	private String outputDatabase;
-
-	private Boolean outputSharded;
-
+	private Optional<String> outputDatabase = Optional.empty();
 	private MapReduceCommand.OutputType outputType = MapReduceCommand.OutputType.REPLACE;
-
-	private String finalizeFunction;
-
 	private Map<String, Object> scopeVariables = new HashMap<String, Object>();
-
+	private Map<String, Object> extraOptions = new HashMap<String, Object>();
 	private Boolean jsMode;
-
-	private Boolean verbose = true;
-
+	private Boolean verbose = Boolean.TRUE;
 	private Integer limit;
 
-	private Map<String, Object> extraOptions = new HashMap<String, Object>();
-
-	private Collation collation;
+	private Optional<Boolean> outputSharded = Optional.empty();
+	private Optional<String> finalizeFunction = Optional.empty();
+	private Optional<Collation> collation = Optional.empty();
 
 	/**
 	 * Static factory method to create a MapReduceOptions instance
@@ -83,6 +75,7 @@ public class MapReduceOptions {
 	 * @return MapReduceOptions so that methods can be chained in a fluent API style
 	 */
 	public MapReduceOptions outputCollection(String collectionName) {
+
 		this.outputCollection = collectionName;
 		return this;
 	}
@@ -95,7 +88,8 @@ public class MapReduceOptions {
 	 * @return MapReduceOptions so that methods can be chained in a fluent API style
 	 */
 	public MapReduceOptions outputDatabase(String outputDatabase) {
-		this.outputDatabase = outputDatabase;
+
+		this.outputDatabase = Optional.ofNullable(outputDatabase);
 		return this;
 	}
 
@@ -107,6 +101,7 @@ public class MapReduceOptions {
 	 * @return MapReduceOptions so that methods can be chained in a fluent API style
 	 */
 	public MapReduceOptions outputTypeInline() {
+
 		this.outputType = MapReduceCommand.OutputType.INLINE;
 		return this;
 	}
@@ -118,6 +113,7 @@ public class MapReduceOptions {
 	 * @return MapReduceOptions so that methods can be chained in a fluent API style
 	 */
 	public MapReduceOptions outputTypeMerge() {
+
 		this.outputType = MapReduceCommand.OutputType.MERGE;
 		return this;
 	}
@@ -141,6 +137,7 @@ public class MapReduceOptions {
 	 * @return MapReduceOptions so that methods can be chained in a fluent API style
 	 */
 	public MapReduceOptions outputTypeReplace() {
+
 		this.outputType = MapReduceCommand.OutputType.REPLACE;
 		return this;
 	}
@@ -153,7 +150,8 @@ public class MapReduceOptions {
 	 * @return MapReduceOptions so that methods can be chained in a fluent API style
 	 */
 	public MapReduceOptions outputSharded(boolean outputShared) {
-		this.outputSharded = outputShared;
+
+		this.outputSharded = Optional.of(outputShared);
 		return this;
 	}
 
@@ -164,7 +162,8 @@ public class MapReduceOptions {
 	 * @return MapReduceOptions so that methods can be chained in a fluent API style
 	 */
 	public MapReduceOptions finalizeFunction(String finalizeFunction) {
-		this.finalizeFunction = finalizeFunction;
+
+		this.finalizeFunction = Optional.ofNullable(finalizeFunction);
 		return this;
 	}
 
@@ -176,6 +175,7 @@ public class MapReduceOptions {
 	 * @return MapReduceOptions so that methods can be chained in a fluent API style
 	 */
 	public MapReduceOptions scopeVariables(Map<String, Object> scopeVariables) {
+
 		this.scopeVariables = scopeVariables;
 		return this;
 	}
@@ -188,6 +188,7 @@ public class MapReduceOptions {
 	 * @return MapReduceOptions so that methods can be chained in a fluent API style
 	 */
 	public MapReduceOptions javaScriptMode(boolean javaScriptMode) {
+
 		this.jsMode = javaScriptMode;
 		return this;
 	}
@@ -198,6 +199,7 @@ public class MapReduceOptions {
 	 * @return MapReduceOptions so that methods can be chained in a fluent API style
 	 */
 	public MapReduceOptions verbose(boolean verbose) {
+
 		this.verbose = verbose;
 		return this;
 	}
@@ -214,18 +216,21 @@ public class MapReduceOptions {
 	 */
 	@Deprecated
 	public MapReduceOptions extraOption(String key, Object value) {
+
 		extraOptions.put(key, value);
 		return this;
 	}
 
 	/**
-	 * @param collation
+	 * Define the Collation specifying language-specific rules for string comparison.
+	 *
+	 * @param collation can be {@literal null}.
 	 * @return
 	 * @since 2.0
 	 */
 	public MapReduceOptions collation(Collation collation) {
 
-		this.collation = collation;
+		this.collation = Optional.ofNullable(collation);
 		return this;
 	}
 
@@ -238,7 +243,7 @@ public class MapReduceOptions {
 		return extraOptions;
 	}
 
-	public String getFinalizeFunction() {
+	public Optional<String> getFinalizeFunction() {
 		return this.finalizeFunction;
 	}
 
@@ -250,11 +255,11 @@ public class MapReduceOptions {
 		return this.outputCollection;
 	}
 
-	public String getOutputDatabase() {
+	public Optional<String> getOutputDatabase() {
 		return this.outputDatabase;
 	}
 
-	public Boolean getOutputSharded() {
+	public Optional<Boolean> getOutputSharded() {
 		return this.outputSharded;
 	}
 
@@ -276,14 +281,17 @@ public class MapReduceOptions {
 	}
 
 	/**
+	 * Get the Collation specifying language-specific rules for string comparison.
+	 *
 	 * @return
 	 * @since 2.0
 	 */
 	public Optional<Collation> getCollation() {
-		return Optional.ofNullable(collation);
+		return collation;
 	}
 
 	public Document getOptionsObject() {
+
 		Document cmd = new Document();
 
 		if (verbose != null) {
@@ -292,9 +300,7 @@ public class MapReduceOptions {
 
 		cmd.put("out", createOutObject());
 
-		if (finalizeFunction != null) {
-			cmd.put("finalize", finalizeFunction);
-		}
+		finalizeFunction.ifPresent(val -> cmd.append("finalize", val));
 
 		if (scopeVariables != null) {
 			cmd.put("scope", scopeVariables);
@@ -314,6 +320,7 @@ public class MapReduceOptions {
 	}
 
 	protected Document createOutObject() {
+
 		Document out = new Document();
 
 		switch (outputType) {
@@ -331,13 +338,8 @@ public class MapReduceOptions {
 				break;
 		}
 
-		if (outputDatabase != null) {
-			out.put("db", outputDatabase);
-		}
-
-		if (outputSharded != null) {
-			out.put("sharded", outputSharded);
-		}
+		outputDatabase.ifPresent(val -> out.append("db", val));
+		outputSharded.ifPresent(val -> out.append("sharded", val));
 
 		return out;
 	}

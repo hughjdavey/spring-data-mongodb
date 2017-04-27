@@ -16,7 +16,6 @@
 package org.springframework.data.mongodb.core.query;
 
 import java.util.Arrays;
-import java.util.Optional;
 
 import org.bson.Document;
 import org.springframework.data.domain.Pageable;
