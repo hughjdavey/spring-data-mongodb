@@ -21,6 +21,7 @@ import java.util.List;
 
 import org.bson.Document;
 import org.junit.Before;
+import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +30,8 @@ import org.springframework.data.mongodb.config.AbstractMongoConfiguration;
 import org.springframework.data.mongodb.core.Collation.Alternate;
 import org.springframework.data.mongodb.core.Collation.ICUComparisonLevel;
 import org.springframework.data.mongodb.core.Collation.ICULocale;
+import org.springframework.data.mongodb.test.util.MongoVersionRule;
+import org.springframework.data.util.Version;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.mongodb.MongoClient;
@@ -39,6 +42,7 @@ import com.mongodb.MongoClient;
 @RunWith(SpringJUnit4ClassRunner.class)
 public class MongoTemplateCollationTests {
 
+	public static @ClassRule MongoVersionRule REQUIRES_AT_LEAST_3_4_0 = MongoVersionRule.atLeast(Version.parse("3.4.0"));
 	public static final String COLLECTION_NAME = "collation-1";
 
 	@Configuration

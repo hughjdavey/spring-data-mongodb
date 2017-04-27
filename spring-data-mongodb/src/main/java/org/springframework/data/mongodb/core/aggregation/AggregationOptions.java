@@ -15,7 +15,10 @@
  */
 package org.springframework.data.mongodb.core.aggregation;
 
+import java.util.Optional;
+
 import org.bson.Document;
+import org.springframework.data.mongodb.core.Collation;
 import org.springframework.util.Assert;
 
 import com.mongodb.DBObject;
@@ -35,7 +38,7 @@ import com.mongodb.DBObject;
  */
 public class AggregationOptions {
 
-	private static final String BATCH_SIZE = "batchSize";
+	private static final String COLLATION = "collation";
 	private static final String CURSOR = "cursor";
 	private static final String EXPLAIN = "explain";
 	private static final String ALLOW_DISK_USE = "allowDiskUse";
@@ -43,6 +46,7 @@ public class AggregationOptions {
 	private final boolean allowDiskUse;
 	private final boolean explain;
 	private final Document cursor;
+	private final Optional<Collation> collation;
 
 	/**
 	 * Creates a new {@link AggregationOptions}.
@@ -52,10 +56,24 @@ public class AggregationOptions {
 	 * @param cursor can be {@literal null}, used to pass additional options to the aggregation.
 	 */
 	public AggregationOptions(boolean allowDiskUse, boolean explain, Document cursor) {
+		this(allowDiskUse, explain, cursor, null);
+	}
+
+	/**
+	 * Creates a new {@link AggregationOptions}.
+	 *
+	 * @param allowDiskUse whether to off-load intensive sort-operations to disk.
+	 * @param explain whether to get the execution plan for the aggregation instead of the actual results.
+	 * @param cursorBatchSize initial cursor batch size.
+	 * @param colllation collation for string comparison. Can be {@literal null}.
+	 * @since 2.0
+	 */
+	public AggregationOptions(boolean allowDiskUse, boolean explain, Document cursor, Collation collation) {
 
 		this.allowDiskUse = allowDiskUse;
 		this.explain = explain;
 		this.cursor = cursor;
+		this.collation = Optional.ofNullable(collation);
 	}
 
 	/**
@@ -67,7 +85,7 @@ public class AggregationOptions {
 	 * @since 2.0
 	 */
 	public AggregationOptions(boolean allowDiskUse, boolean explain, int cursorBatchSize) {
-		this(allowDiskUse, explain, createCursor(cursorBatchSize));
+		this(allowDiskUse, explain, createCursor(cursorBatchSize), null);
 	}
 
 	/**
@@ -84,6 +102,7 @@ public class AggregationOptions {
 		boolean allowDiskUse = false;
 		boolean explain = false;
 		Document cursor = null;
+		Collation collation = null;
 
 		if (document.containsKey(ALLOW_DISK_USE)) {
 			allowDiskUse = document.get(ALLOW_DISK_USE, Boolean.class);
@@ -97,7 +116,11 @@ public class AggregationOptions {
 			cursor = document.get(CURSOR, Document.class);
 		}
 
-		return new AggregationOptions(allowDiskUse, explain, cursor);
+		if (document.containsKey(COLLATION)) {
+			collation = Collation.from(document.get(COLLATION, Document.class));
+		}
+
+		return new AggregationOptions(allowDiskUse, explain, cursor, collation);
 	}
 
 	/**
@@ -144,6 +167,16 @@ public class AggregationOptions {
 	}
 
 	/**
+	 * Get collation settings for string comparison.
+	 *
+	 * @return
+	 * @since 2.0
+	 */
+	public Optional<Collation> getCollation() {
+		return collation;
+	}
+
+	/**
 	 * Returns a new potentially adjusted copy for the given {@code aggregationCommandObject} with the configuration
 	 * applied.
 	 *
@@ -166,6 +199,10 @@ public class AggregationOptions {
 			result.put(CURSOR, cursor);
 		}
 
+		if (collation.isPresent() && !result.containsKey(COLLATION)) {
+			result.append(COLLATION, collation.map(Collation::toDocument).get());
+		}
+
 		return result;
 	}
 
@@ -180,6 +217,7 @@ public class AggregationOptions {
 		document.put(ALLOW_DISK_USE, allowDiskUse);
 		document.put(EXPLAIN, explain);
 		document.put(CURSOR, cursor);
+		collation.ifPresent(val -> document.append("collation", val.toDocument()));
 
 		return document;
 	}
@@ -207,6 +245,7 @@ public class AggregationOptions {
 		private boolean allowDiskUse;
 		private boolean explain;
 		private Document cursor;
+		private Collation collation;
 
 		/**
 		 * Defines whether to off-load intensive sort-operations to disk.
@@ -257,13 +296,19 @@ public class AggregationOptions {
 			return this;
 		}
 
+		public Builder collation(Collation collation) {
+
+			this.collation = collation;
+			return this;
+		}
+
 		/**
 		 * Returns a new {@link AggregationOptions} instance with the given configuration.
 		 *
 		 * @return
 		 */
 		public AggregationOptions build() {
-			return new AggregationOptions(allowDiskUse, explain, cursor);
+			return new AggregationOptions(allowDiskUse, explain, cursor, collation);
 		}
 	}
 }

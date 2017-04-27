@@ -129,6 +129,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.CreateCollectionOptions;
+import com.mongodb.client.model.DeleteOptions;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.FindOneAndDeleteOptions;
 import com.mongodb.client.model.FindOneAndUpdateOptions;
@@ -740,7 +741,7 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 	public <T> T findAndRemove(Query query, Class<T> entityClass, String collectionName) {
 
 		return doFindAndRemove(collectionName, query.getQueryObject(), query.getFieldsObject(),
-				getMappedSortObject(query, entityClass), entityClass);
+				getMappedSortObject(query, entityClass), query.getCollation().orElse(null), entityClass);
 	}
 
 	public long count(Query query, Class<?> entityClass) {
@@ -1179,8 +1180,17 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 
 				increaseVersionForUpdateIfNecessary(entity, update);
 
-				Document queryObj = query == null ? new Document()
-						: queryMapper.getMappedObject(query.getQueryObject(), entity);
+				UpdateOptions opts = new UpdateOptions();
+				opts.upsert(upsert);
+
+				Document queryObj = new Document();
+
+				if (query != null) {
+
+					queryObj.putAll(queryMapper.getMappedObject(query.getQueryObject(), entity));
+					query.getCollation().map(Collation::toMongoCollation).ifPresent(opts::collation);
+				}
+
 				Document updateObj = update == null ? new Document()
 						: updateMapper.getMappedObject(update.getUpdateObject(), entity);
 
@@ -1196,9 +1206,6 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 				MongoAction mongoAction = new MongoAction(writeConcern, MongoActionOperation.UPDATE, collectionName,
 						entityClass, updateObj, queryObj);
 				WriteConcern writeConcernToUse = prepareWriteConcern(mongoAction);
-
-				UpdateOptions opts = new UpdateOptions();
-				opts.upsert(upsert);
 
 				collection = writeConcernToUse != null ? collection.withWriteConcern(writeConcernToUse) : collection;
 
@@ -1359,6 +1366,7 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 		final Optional<? extends MongoPersistentEntity<?>> entity = getPersistentEntity(entityClass);
 
 		return execute(collectionName, new CollectionCallback<DeleteResult>() {
+
 			public DeleteResult doInCollection(MongoCollection<Document> collection)
 					throws MongoException, DataAccessException {
 
@@ -1366,8 +1374,12 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 
 				Document mappedQuery = queryMapper.getMappedObject(queryObject, entity);
 
+				DeleteOptions options = new DeleteOptions();
+				query.getCollation().map(Collation::toMongoCollation).ifPresent(options::collation);
+
 				MongoAction mongoAction = new MongoAction(writeConcern, MongoActionOperation.REMOVE, collectionName,
 						entityClass, null, queryObject);
+
 				WriteConcern writeConcernToUse = prepareWriteConcern(mongoAction);
 
 				DeleteResult dr = null;
@@ -1377,9 +1389,10 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 				}
 
 				if (writeConcernToUse == null) {
-					dr = collection.deleteMany(mappedQuery);
+
+					dr = collection.deleteMany(mappedQuery, options);
 				} else {
-					dr = collection.withWriteConcern(writeConcernToUse).deleteMany(mappedQuery);
+					dr = collection.withWriteConcern(writeConcernToUse).deleteMany(mappedQuery, options);
 				}
 
 				maybeEmitEvent(new AfterDeleteEvent<T>(queryObject, entityClass, collectionName));
@@ -1439,7 +1452,18 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 			result = result.filter(queryMapper.getMappedObject(query.getQueryObject(), Optional.empty()));
 		}
 
+		Optional<Collation> collation = query != null ? query.getCollation() : Optional.empty();
+
 		if (mapReduceOptions != null) {
+
+			Optionals.ifAllPresent(collation, mapReduceOptions.getCollation(), (l, r) -> {
+				throw new IllegalArgumentException(
+						"Both Query and MapReduceOptions define the collation. Please provide the collation only via one of the two.");
+			});
+
+			if (mapReduceOptions.getCollation().isPresent()) {
+				collation = mapReduceOptions.getCollation();
+			}
 
 			if (!CollectionUtils.isEmpty(mapReduceOptions.getScopeVariables())) {
 				Document vars = new Document();
@@ -1459,6 +1483,11 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 				result = result.sharded(mapReduceOptions.getOutputSharded());
 			}
 		}
+
+		if (collation.isPresent()) {
+			result = result.collation(collation.map(Collation::toMongoCollation).get());
+		}
+
 		List<T> mappedResults = new ArrayList<T>();
 		DocumentCallback<T> callback = new ReadDocumentCallback<T>(mongoConverter, entityClass, inputCollectionName);
 
@@ -1737,7 +1766,11 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 
 				Integer cursorBatchSize = options.getCursorBatchSize();
 				if (cursorBatchSize != null) {
-					cursor.batchSize(cursorBatchSize);
+					cursor = cursor.batchSize(cursorBatchSize);
+				}
+
+				if (options.getCollation().isPresent()) {
+					cursor = cursor.collation(options.getCollation().map(Collation::toMongoCollation).get());
 				}
 
 				return new CloseableIterableCursorAdapter<O>(cursor.iterator(), exceptionTranslator, readCallback);
@@ -1958,7 +1991,7 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 	 * @return the List of converted objects.
 	 */
 	protected <T> T doFindAndRemove(String collectionName, Document query, Document fields, Document sort,
-			Class<T> entityClass) {
+			Collation collation, Class<T> entityClass) {
 
 		EntityReader<? super T, Bson> readerToUse = this.mongoConverter;
 
@@ -1969,7 +2002,8 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 
 		Optional<? extends MongoPersistentEntity<?>> entity = mappingContext.getPersistentEntity(entityClass);
 
-		return executeFindOneInternal(new FindAndRemoveCallback(queryMapper.getMappedObject(query, entity), fields, sort),
+		return executeFindOneInternal(
+				new FindAndRemoveCallback(queryMapper.getMappedObject(query, entity), fields, sort, collation),
 				new ReadDocumentCallback<T>(readerToUse, entityClass, collectionName), collectionName);
 	}
 
@@ -2323,11 +2357,14 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 		private final Document query;
 		private final Document fields;
 		private final Document sort;
+		private final Optional<Collation> collation;
 
-		public FindAndRemoveCallback(Document query, Document fields, Document sort) {
+		public FindAndRemoveCallback(Document query, Document fields, Document sort, Collation collation) {
+
 			this.query = query;
 			this.fields = fields;
 			this.sort = sort;
+			this.collation = Optional.ofNullable(collation);
 		}
 
 		public Document doInCollection(MongoCollection<Document> collection) throws MongoException, DataAccessException {
@@ -2335,6 +2372,7 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 			FindOneAndDeleteOptions opts = new FindOneAndDeleteOptions();
 			opts.sort(sort);
 			opts.projection(fields);
+			collation.map(Collation::toMongoCollation).ifPresent(opts::collation);
 
 			return collection.findOneAndDelete(query, opts);
 		}

@@ -17,10 +17,12 @@ package org.springframework.data.mongodb.core.mapreduce;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import org.bson.Document;
 
 import com.mongodb.MapReduceCommand;
+import org.springframework.data.mongodb.core.Collation;
 
 /**
  * @author Mark Pollack
@@ -48,6 +50,8 @@ public class MapReduceOptions {
 	private Integer limit;
 
 	private Map<String, Object> extraOptions = new HashMap<String, Object>();
+
+	private Collation collation;
 
 	/**
 	 * Static factory method to create a MapReduceOptions instance
@@ -215,6 +219,17 @@ public class MapReduceOptions {
 	}
 
 	/**
+	 * @param collation
+	 * @return
+	 * @since 2.0
+	 */
+	public MapReduceOptions collation(Collation collation) {
+
+		this.collation = collation;
+		return this;
+	}
+
+	/**
 	 * @return
 	 * @deprecated since 1.7
 	 */
@@ -260,6 +275,14 @@ public class MapReduceOptions {
 		return limit;
 	}
 
+	/**
+	 * @return
+	 * @since 2.0
+	 */
+	public Optional<Collation> getCollation() {
+		return Optional.ofNullable(collation);
+	}
+
 	public Document getOptionsObject() {
 		Document cmd = new Document();
 
@@ -284,6 +307,8 @@ public class MapReduceOptions {
 		if (!extraOptions.keySet().isEmpty()) {
 			cmd.putAll(extraOptions);
 		}
+
+		getCollation().ifPresent(val -> cmd.append("collation", val.toDocument()));
 
 		return cmd;
 	}

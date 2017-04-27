@@ -16,6 +16,7 @@
 package org.springframework.data.mongodb.core.query;
 
 import java.util.Arrays;
+import java.util.Optional;
 
 import org.bson.Document;
 import org.springframework.data.domain.Pageable;
@@ -404,7 +405,9 @@ public final class NearQuery {
 		Document document = new Document();
 
 		if (query != null) {
+
 			document.put("query", query.getQueryObject());
+			query.getCollation().ifPresent(collation -> document.append("collation", collation.toDocument()));
 		}
 
 		if (maxDistance != null) {

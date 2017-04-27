@@ -51,6 +51,7 @@ import com.mongodb.client.MongoCollection;
 public class DefaultIndexOperationsIntegrationTests {
 
 	private static final Version THREE_DOT_TWO = new Version(3, 2);
+	private static final Version THREE_DOT_FOUR = new Version(3, 4);
 	private static Version mongoVersion;
 	static final org.bson.Document GEO_SPHERE_2D = new org.bson.Document("loaction", "2dsphere");
 
@@ -147,8 +148,10 @@ public class DefaultIndexOperationsIntegrationTests {
 		assertThat(info.getPartialFilterExpression()).isEqualTo("{ \"a_g_e\" : { \"$gte\" : 10 } }");
 	}
 
-	@Test // DATAMONGO-1516
+	@Test // DATAMONGO-1518
 	public void shouldCreateIndexWihtCollationCorrectly() {
+
+		assumeThat(mongoVersion.isGreaterThanOrEqualTo(THREE_DOT_FOUR), is(true));
 
 		IndexDefinition id = new Index().named("with-collation").on("xyz", Direction.ASC)
 				.collation(Collation.of("de_AT").caseFirst(ICUCaseFirst.off()));

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 the original author or authors.
+ * Copyright 2010-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,10 @@
  */
 package org.springframework.data.mongodb.core.mapreduce;
 
+import java.util.Optional;
+
 import org.bson.Document;
+import org.springframework.data.mongodb.core.Collation;
 
 /**
  * Collects the parameters required to perform a group operation on a collection. The query condition and the input
@@ -33,6 +36,7 @@ public class GroupBy {
 	private Document initialDocument;
 	private String reduce;
 	private String finalize;
+	private Optional<Collation> collation = Optional.empty();
 
 	public GroupBy(String... keys) {
 		Document document = new Document();
@@ -82,6 +86,12 @@ public class GroupBy {
 		return this;
 	}
 
+	public GroupBy collation(Collation collation) {
+
+		this.collation = Optional.ofNullable(collation);
+		return this;
+	}
+
 	public Document getGroupByObject() {
 		// return new GroupCommand(dbCollection, dboKeys, condition, initial, reduce, finalize);
 		Document document = new Document();
@@ -101,6 +111,8 @@ public class GroupBy {
 		if (finalize != null) {
 			document.put("finalize", finalize);
 		}
+		collation.ifPresent(val -> document.append("collation", val.toDocument()));
+
 		return document;
 	}
 
