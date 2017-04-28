@@ -2367,9 +2367,7 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 
 		public Document doInCollection(MongoCollection<Document> collection) throws MongoException, DataAccessException {
 
-			FindOneAndDeleteOptions opts = new FindOneAndDeleteOptions();
-			opts.sort(sort);
-			opts.projection(fields);
+			FindOneAndDeleteOptions opts = new FindOneAndDeleteOptions().sort(sort).projection(fields);
 			collation.map(Collation::toMongoCollation).ifPresent(opts::collation);
 
 			return collection.findOneAndDelete(query, opts);
