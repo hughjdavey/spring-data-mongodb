@@ -12,6 +12,8 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.springframework.data.mongodb.repository.EntityRepository.Entity;
+import static org.springframework.data.mongodb.repository.NestedEntityRepository.NestedEntity;
 
 @Slf4j
 @ContextConfiguration("config/MongoNamespaceIntegrationTests-context.xml")

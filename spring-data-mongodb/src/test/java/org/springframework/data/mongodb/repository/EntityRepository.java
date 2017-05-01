@@ -1,8 +1,12 @@
 package org.springframework.data.mongodb.repository;
 
+import lombok.Data;
 import org.bson.types.ObjectId;
+import org.springframework.data.annotation.Id;
 
-public interface EntityRepository extends MongoRepository<Entity, String> {
+import static org.springframework.data.mongodb.repository.NestedEntityRepository.NestedEntity;
+
+public interface EntityRepository extends MongoRepository<EntityRepository.Entity, String> {
 
     Entity findById(final String id);
 
@@ -11,4 +15,13 @@ public interface EntityRepository extends MongoRepository<Entity, String> {
     Entity findById(final ObjectId id);
 
     Entity findByNestedEntityId(final ObjectId id);
+
+    @Data
+    class Entity {
+
+        @Id
+        public String id;
+
+        public final NestedEntity nestedEntity;
+    }
 }
